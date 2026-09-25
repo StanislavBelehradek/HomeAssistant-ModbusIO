@@ -2,8 +2,8 @@
 
 Turns raw press/release edges into single/double/long press pulses, reported
 through a callback as one of the `BUTTON_STATES` (with "none" as the idle
-state in between). Timing mirrors the long-press/double-click detection used
-by the HomeAssistant-VirtualDevices custom component's `event.py`.
+state in between). "single" is reported immediately on press, then upgraded
+to "double" or "long" if a second press or a long hold follows.
 """
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ class ButtonDetector:
         self._on_state = on_state
         self._long_press_timer: threading.Timer | None = None
         self._double_click_timer: threading.Timer | None = None
+        self._reset_timer: threading.Timer | None = None
         self._long_press_fired = False
 
     def handle_edge(self, pressed: bool) -> None:
@@ -44,8 +45,15 @@ class ButtonDetector:
 
     def _on_press(self) -> None:
         self._long_press_fired = False
-        self._cancel(self._long_press_timer)
         self._long_press_timer = self._start_timer(self._long_press_s, self._fire_long_press)
+        if self._double_click_timer is not None:
+            # Second press within the window: upgrade the already-emitted single to a double.
+            self._cancel(self._double_click_timer)
+            self._double_click_timer = None
+            self._emit(BUTTON_STATE_DOUBLE)
+        else:
+            # Report a press immediately; it may still be upgraded to double/long later.
+            self._emit(BUTTON_STATE_SINGLE)
 
     def _fire_long_press(self) -> None:
         self._long_press_timer = None
@@ -57,20 +65,19 @@ class ButtonDetector:
         self._long_press_timer = None
         if self._long_press_fired:
             return
-        if self._double_click_timer is not None:
-            self._cancel(self._double_click_timer)
-            self._double_click_timer = None
-            self._emit(BUTTON_STATE_DOUBLE)
-            return
-        self._double_click_timer = self._start_timer(self._double_click_s, self._fire_single_press)
+        self._double_click_timer = self._start_timer(self._double_click_s, self._clear_double_click_window)
 
-    def _fire_single_press(self) -> None:
+    def _clear_double_click_window(self) -> None:
         self._double_click_timer = None
-        self._emit(BUTTON_STATE_SINGLE)
 
     def _emit(self, state: str) -> None:
+        self._cancel(self._reset_timer)
         self._on_state(state)
-        self._start_timer(BUTTON_RESET_DELAY_S, lambda: self._on_state(BUTTON_STATE_NONE))
+        self._reset_timer = self._start_timer(BUTTON_RESET_DELAY_S, self._fire_reset)
+
+    def _fire_reset(self) -> None:
+        self._reset_timer = None
+        self._on_state(BUTTON_STATE_NONE)
 
     @staticmethod
     def _start_timer(delay_s: float, callback: Callable[[], None]) -> threading.Timer:
