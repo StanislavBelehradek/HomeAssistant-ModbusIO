@@ -31,6 +31,20 @@ def _load_options() -> dict:
         return json.load(handle)
 
 
+def _log_serial_devices() -> None:
+    """Log available stable serial device paths to help diagnose port config."""
+    by_path_dir = "/dev/serial/by-path"
+    try:
+        devices = sorted(os.listdir(by_path_dir))
+    except OSError as err:
+        _LOGGER.info("No serial devices found in %s (%s)", by_path_dir, err)
+        return
+    if devices:
+        _LOGGER.info("Available serial devices in %s: %s", by_path_dir, ", ".join(devices))
+    else:
+        _LOGGER.info("No serial devices found in %s", by_path_dir)
+
+
 def _mqtt_settings(options: dict) -> tuple[str, int, str | None, str | None]:
     """MQTT connection info: env vars set by run.sh (Supervisor service or
     manual fallback) take precedence over the raw add-on options."""
@@ -40,6 +54,13 @@ def _mqtt_settings(options: dict) -> tuple[str, int, str | None, str | None]:
     password = os.environ.get("MQTT_PASSWORD") or options.get("mqtt_password") or None
     if not host:
         raise ModbusMasterError("No MQTT broker configured (Supervisor service unavailable and mqtt_host is empty)")
+    _LOGGER.info(
+        "MQTT broker: %s:%d (username=%s, password=%s)",
+        host,
+        port,
+        username or "<none>",
+        "<set>" if password else "<none>",
+    )
     return host, port, username, password
 
 
@@ -69,6 +90,7 @@ def _build_boards(options: dict) -> tuple[list[IoBoard], list[ModbusMaster]]:
 
 def main() -> None:
     options = _load_options()
+    _log_serial_devices()
 
     try:
         boards, masters = _build_boards(options)
