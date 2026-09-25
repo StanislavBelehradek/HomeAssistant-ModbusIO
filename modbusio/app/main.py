@@ -2,14 +2,16 @@
 
 Reads the add-on options, opens the shared Modbus RTU serial connection,
 connects to the configured MQTT broker, publishes MQTT discovery configs for
-each board's inputs (binary_sensor) and outputs (switch), and polls each
-board on its own background thread in parallel.
+each board's inputs (binary_sensor) and outputs (switch) - or `button`/`light`
+for points overridden via the `entities` option - and polls each board on its
+own background thread in parallel.
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
+import re
 import signal
 import sys
 import threading
@@ -17,13 +19,16 @@ from types import FrameType
 
 import paho.mqtt.client as mqtt
 
-from .const import OPTIONS_FILE
+from .button import ButtonDetector
+from .const import ENTITY_TYPE_BUTTON, ENTITY_TYPE_LIGHT, OPTIONS_FILE
 from .io_board import IoBoard
 from .modbus_master import ModbusMaster, ModbusMasterError
 from .mqtt_io import BoardEntities, dumps
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 _LOGGER = logging.getLogger("modbusio")
+
+_POINT_RE = re.compile(r"^(input|output)-(\d+)$")
 
 
 def _load_options() -> dict:
@@ -64,6 +69,38 @@ def _mqtt_settings(options: dict) -> tuple[str, int, str | None, str | None]:
     return host, port, username, password
 
 
+def _parse_entity_overrides(
+    options: dict,
+) -> tuple[dict[tuple[str, int], str | None], dict[tuple[str, int], str | None]]:
+    """Parse the `entities` option into per-point button/light overrides.
+
+    Keys are (board_name, 0-based index); values are the custom entity name
+    (or None for the default generated name). Unlisted points keep the
+    default binary_sensor (input) / switch (output) entity.
+    """
+    button_overrides: dict[tuple[str, int], str | None] = {}
+    light_overrides: dict[tuple[str, int], str | None] = {}
+    for entity_config in options.get("entities", []):
+        match = _POINT_RE.match(entity_config["point"])
+        if not match:
+            _LOGGER.warning("Ignoring entity %r: invalid point %r", entity_config.get("name"), entity_config["point"])
+            continue
+        kind = match.group(1)
+        key = (entity_config["board"], int(match.group(2)) - 1)
+        name = entity_config.get("name") or None
+        entity_type = entity_config["type"]
+        if entity_type == ENTITY_TYPE_BUTTON and kind == "input":
+            button_overrides[key] = name
+        elif entity_type == ENTITY_TYPE_LIGHT and kind == "output":
+            light_overrides[key] = name
+        else:
+            _LOGGER.warning(
+                "Ignoring entity %r: type %r is not valid for point %r",
+                name, entity_type, entity_config["point"],
+            )
+    return button_overrides, light_overrides
+
+
 def _build_boards(options: dict) -> tuple[list[IoBoard], list[ModbusMaster]]:
     """Build boards, opening one shared ModbusMaster per unique port/baudrate/parity."""
     masters: dict[tuple[str, int, str], ModbusMaster] = {}
@@ -100,6 +137,7 @@ def main() -> None:
 
     entities = {board.name: BoardEntities(board) for board in boards}
     discovery_prefix = options.get("discovery_prefix", "homeassistant")
+    button_overrides, light_overrides = _parse_entity_overrides(options)
 
     try:
         mqtt_host, mqtt_port, mqtt_username, mqtt_password = _mqtt_settings(options)
@@ -113,6 +151,17 @@ def main() -> None:
 
     output_topics: dict[str, tuple[IoBoard, int]] = {}
 
+    long_press_s = options.get("long_press_time_ms", 1000) / 1000
+    double_click_s = options.get("double_click_time_ms", 300) / 1000
+    button_detectors: dict[tuple[str, int], ButtonDetector] = {}
+    for board_name, index in button_overrides:
+        board_entities = entities[board_name]
+
+        def _on_state(state: str, board_entities: BoardEntities = board_entities, index: int = index) -> None:
+            client.publish(board_entities.input_button_topic(index), state, retain=False)
+
+        button_detectors[(board_name, index)] = ButtonDetector(long_press_s, double_click_s, _on_state)
+
     def on_connect(client: mqtt.Client, _userdata, _flags, _rc) -> None:
         _LOGGER.info("Connected to MQTT broker, publishing %d board(s)", len(boards))
         for board in boards:
@@ -121,13 +170,23 @@ def main() -> None:
 
             if board.mode in ("input", "input_output"):
                 for index in range(board.io_count):
-                    topic, payload = board_entities.input_discovery(discovery_prefix, index)
-                    client.publish(topic, dumps(payload), retain=True)
-                    client.publish(board_entities.input_topic(index), "OFF", retain=True)
+                    button_name = button_overrides.get((board.name, index))
+                    if (board.name, index) in button_overrides:
+                        topic, payload = board_entities.input_button_discovery(discovery_prefix, index, button_name)
+                        client.publish(topic, dumps(payload), retain=True)
+                        client.publish(board_entities.input_button_topic(index), "none", retain=True)
+                    else:
+                        topic, payload = board_entities.input_discovery(discovery_prefix, index)
+                        client.publish(topic, dumps(payload), retain=True)
+                        client.publish(board_entities.input_topic(index), "OFF", retain=True)
 
             if board.mode in ("output", "input_output"):
                 for index in range(board.io_count):
-                    topic, payload = board_entities.output_discovery(discovery_prefix, index)
+                    light_name = light_overrides.get((board.name, index))
+                    if (board.name, index) in light_overrides:
+                        topic, payload = board_entities.output_light_discovery(discovery_prefix, index, light_name)
+                    else:
+                        topic, payload = board_entities.output_discovery(discovery_prefix, index)
                     client.publish(topic, dumps(payload), retain=True)
                     client.publish(board_entities.output_state_topic(index), "OFF", retain=True)
                     command_topic = board_entities.output_command_topic(index)
@@ -151,6 +210,7 @@ def main() -> None:
     def poll_loop(board: IoBoard) -> None:
         board_entities = entities[board.name]
         while not stop_event.is_set():
+            previous_inputs = list(board.inputs)
             try:
                 changed = board.poll()
             except ModbusMasterError as err:
@@ -158,7 +218,12 @@ def main() -> None:
             else:
                 if changed:
                     for index, value in enumerate(board.inputs):
-                        client.publish(board_entities.input_topic(index), "ON" if value else "OFF", retain=True)
+                        detector = button_detectors.get((board.name, index))
+                        if detector is not None:
+                            if value != previous_inputs[index]:
+                                detector.handle_edge(value)
+                        else:
+                            client.publish(board_entities.input_topic(index), "ON" if value else "OFF", retain=True)
             stop_event.wait(board.poll_interval)
 
     def handle_shutdown(_signum: int, _frame: FrameType | None) -> None:

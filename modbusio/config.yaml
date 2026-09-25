@@ -1,5 +1,5 @@
 name: "Modbus IO (Eletechsup)"
-version: "0.1.2"
+version: "0.1.3"
 slug: "modbusio"
 description: "Control and monitor Eletechsup Modbus RTU IO boards (M23IOxx relay/opto-input boards) via MQTT discovery."
 url: "https://github.com/StanislavBelehradek/HomeAssistant-ModbusIO"
@@ -18,13 +18,18 @@ options:
   mqtt_username: ""
   mqtt_password: ""
   discovery_prefix: "homeassistant"
+  long_press_time_ms: 1000
+  double_click_time_ms: 300
   boards: []
+  entities: []
 schema:
   mqtt_host: "str?"
   mqtt_port: "port?"
   mqtt_username: "str?"
   mqtt_password: "password?"
   discovery_prefix: "str"
+  long_press_time_ms: "int(100,10000)"
+  double_click_time_ms: "int(100,5000)"
   boards:
     - name: "str"
       port: "str"
@@ -34,3 +39,8 @@ schema:
       poll_interval_ms: "int(0,60000)"
       type: "list(M23IOA08|M23IOB16|M23IOC24|M23IOD32|M23IOE48|M23IOF64)"
       mode: "list(input|output|input_output)"
+  entities:
+    - name: "str"
+      board: "str"
+      point: "str"
+      type: "list(button|light)"

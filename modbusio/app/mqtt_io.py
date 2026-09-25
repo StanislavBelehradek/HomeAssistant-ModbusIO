@@ -10,6 +10,7 @@ import json
 import re
 from typing import Any
 
+from .const import BUTTON_STATES
 from .io_board import IoBoard
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -59,6 +60,42 @@ class BoardEntities:
         topic = f"{discovery_prefix}/switch/modbusio/{object_id}/config"
         payload = {
             "name": f"{self.board.name} Output {index + 1}",
+            "unique_id": f"modbusio_{object_id}",
+            "command_topic": self.output_command_topic(index),
+            "state_topic": self.output_state_topic(index),
+            "payload_on": "ON",
+            "payload_off": "OFF",
+            "availability_topic": self.availability_topic,
+            "device": self._device_info(),
+        }
+        return topic, payload
+
+    def input_button_topic(self, index: int) -> str:
+        return f"modbusio/{self.slug}/input/{index + 1}/button"
+
+    def input_button_discovery(
+        self, discovery_prefix: str, index: int, name: str | None = None
+    ) -> tuple[str, dict[str, Any]]:
+        object_id = f"{self.slug}_input_{index + 1}_button"
+        topic = f"{discovery_prefix}/sensor/modbusio/{object_id}/config"
+        payload = {
+            "name": name or f"{self.board.name} Input {index + 1} Button",
+            "unique_id": f"modbusio_{object_id}",
+            "state_topic": self.input_button_topic(index),
+            "device_class": "enum",
+            "options": BUTTON_STATES,
+            "availability_topic": self.availability_topic,
+            "device": self._device_info(),
+        }
+        return topic, payload
+
+    def output_light_discovery(
+        self, discovery_prefix: str, index: int, name: str | None = None
+    ) -> tuple[str, dict[str, Any]]:
+        object_id = f"{self.slug}_output_{index + 1}_light"
+        topic = f"{discovery_prefix}/light/modbusio/{object_id}/config"
+        payload = {
+            "name": name or f"{self.board.name} Output {index + 1}",
             "unique_id": f"modbusio_{object_id}",
             "command_topic": self.output_command_topic(index),
             "state_topic": self.output_state_topic(index),

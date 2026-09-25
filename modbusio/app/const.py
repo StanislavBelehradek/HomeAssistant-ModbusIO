@@ -17,3 +17,20 @@ BOARD_IO_COUNT = {
 }
 
 OPTIONS_FILE = "/data/options.json"
+
+# Entity type overrides selectable per I/O point via the `entities` option,
+# replacing the default binary_sensor (input) / switch (output) entity.
+ENTITY_TYPE_BUTTON = "button"
+ENTITY_TYPE_LIGHT = "light"
+
+# States reported by a `button` entity: "none" is the idle/reset state
+# between presses, the others are the detected press pattern.
+BUTTON_STATE_NONE = "none"
+BUTTON_STATE_SINGLE = "single"
+BUTTON_STATE_DOUBLE = "double"
+BUTTON_STATE_LONG = "long"
+BUTTON_STATES = [BUTTON_STATE_NONE, BUTTON_STATE_SINGLE, BUTTON_STATE_DOUBLE, BUTTON_STATE_LONG]
+
+# How long a "single"/"double"/"long" pulse stays reported before the button
+# entity resets to "none", so repeated identical presses re-trigger a state change.
+BUTTON_RESET_DELAY_S = 0.3
