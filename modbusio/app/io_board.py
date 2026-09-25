@@ -19,11 +19,20 @@ _LOGGER = logging.getLogger(__name__)
 class IoBoard:
     """Owns the input/output bit state for one Modbus IO board."""
 
-    def __init__(self, name: str, master: ModbusMaster, address: int, board_type: str, mode: str) -> None:
+    def __init__(
+        self,
+        name: str,
+        master: ModbusMaster,
+        address: int,
+        board_type: str,
+        mode: str,
+        poll_interval_ms: int,
+    ) -> None:
         self.name = name
         self.address = address
         self.board_type = board_type
         self.mode = mode
+        self.poll_interval = poll_interval_ms / 1000
         self._master = master
         self.io_count = BOARD_IO_COUNT[board_type]
         self._register_count = math.ceil(self.io_count / 16)

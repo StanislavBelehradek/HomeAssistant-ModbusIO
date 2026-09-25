@@ -13,10 +13,6 @@ uart: true
 services:
   - "mqtt:want"
 options:
-  port: "/dev/ttyUSB0"
-  baudrate: 9600
-  parity: "N"
-  poll_interval_ms: 20
   mqtt_host: ""
   mqtt_port: 1883
   mqtt_username: ""
@@ -24,10 +20,6 @@ options:
   discovery_prefix: "homeassistant"
   boards: []
 schema:
-  port: "str"
-  baudrate: "int"
-  parity: "list(N|E|O)"
-  poll_interval_ms: "int(0,60000)"
   mqtt_host: "str?"
   mqtt_port: "port?"
   mqtt_username: "str?"
@@ -35,6 +27,10 @@ schema:
   discovery_prefix: "str"
   boards:
     - name: "str"
+      port: "str"
+      baudrate: "int"
+      parity: "list(N|E|O)"
       address: "int(1,247)"
+      poll_interval_ms: "int(0,60000)"
       type: "list(M23IOA08|M23IOB16|M23IOC24|M23IOD32|M23IOE48|M23IOF64)"
       mode: "list(input|output|input_output)"

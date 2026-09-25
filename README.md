@@ -15,10 +15,12 @@ Assistant Core's Python environment.
 
 - Talks Modbus RTU over a serial port (`pyserial`/`pymodbus`) to Eletechsup
   M23IOxx boards, one or more per bus (each board has its own slave address).
+  Boards on the same `port`/`baudrate`/`parity` share a single serial
+  connection; boards with different serial settings get their own.
 - Publishes each board's digital inputs as `binary_sensor` entities and
   outputs as `switch` entities via MQTT discovery.
 - Configurable per-board mode: `input`, `output`, or `input_output`.
-- Configurable poll interval and serial parameters (baudrate/parity).
+- Configurable per-board poll interval and serial parameters (port/baudrate/parity).
 
 ## Installation
 
@@ -34,12 +36,9 @@ Assistant Core's Python environment.
 
 | Option | Description |
 | --- | --- |
-| `port` | Serial device for the RS485 adapter (e.g. `/dev/ttyUSB0`). |
-| `baudrate` / `parity` | Serial parameters for the Modbus RTU bus. |
-| `poll_interval_ms` | Milliseconds between input polls of the bus (default `20`). |
 | `mqtt_host` / `mqtt_port` / `mqtt_username` / `mqtt_password` | Fallback MQTT broker connection details, only used if the Supervisor-managed broker (see below) isn't available. |
 | `discovery_prefix` | MQTT discovery prefix configured in the Home Assistant MQTT integration (default `homeassistant`). |
-| `boards` | List of boards: `name`, `address` (Modbus slave address, 1-247), `type` (`M23IOA08`, `M23IOB16`, `M23IOC24`, `M23IOD32`, `M23IOE48`, `M23IOF64`), `mode` (`input`, `output`, `input_output`). |
+| `boards` | List of boards, each with its own serial connection: `name`, `address` (Modbus slave address, 1-247), `type` (`M23IOA08`, `M23IOB16`, `M23IOC24`, `M23IOD32`, `M23IOE48`, `M23IOF64`), `mode` (`input`, `output`, `input_output`), `port` (serial device, e.g. `/dev/ttyUSB0`), `baudrate`, `parity` (`N`/`E`/`O`), `poll_interval_ms` (milliseconds between input polls of this board's bus). Boards sharing the same `port`/`baudrate`/`parity` reuse the same serial connection. |
 
 ### MQTT broker discovery
 

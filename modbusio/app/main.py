@@ -43,9 +43,17 @@ def _mqtt_settings(options: dict) -> tuple[str, int, str | None, str | None]:
     return host, port, username, password
 
 
-def _build_boards(options: dict, master: ModbusMaster) -> list[IoBoard]:
+def _build_boards(options: dict) -> tuple[list[IoBoard], list[ModbusMaster]]:
+    """Build boards, opening one shared ModbusMaster per unique port/baudrate/parity."""
+    masters: dict[tuple[str, int, str], ModbusMaster] = {}
     boards: list[IoBoard] = []
     for board_config in options.get("boards", []):
+        bus_key = (board_config["port"], board_config["baudrate"], board_config.get("parity", "N"))
+        master = masters.get(bus_key)
+        if master is None:
+            master = ModbusMaster(port=bus_key[0], baudrate=bus_key[1], parity=bus_key[2])
+            master.open()
+            masters[bus_key] = master
         boards.append(
             IoBoard(
                 board_config["name"],
@@ -53,29 +61,23 @@ def _build_boards(options: dict, master: ModbusMaster) -> list[IoBoard]:
                 board_config["address"],
                 board_config["type"],
                 board_config["mode"],
+                board_config["poll_interval_ms"],
             )
         )
-    return boards
+    return boards, list(masters.values())
 
 
 def main() -> None:
     options = _load_options()
 
-    master = ModbusMaster(
-        port=options["port"],
-        baudrate=options["baudrate"],
-        parity=options.get("parity", "N"),
-    )
     try:
-        master.open()
+        boards, masters = _build_boards(options)
     except ModbusMasterError as err:
         _LOGGER.error("%s", err)
         sys.exit(1)
 
-    boards = _build_boards(options, master)
     entities = {board.name: BoardEntities(board) for board in boards}
     discovery_prefix = options.get("discovery_prefix", "homeassistant")
-    poll_interval = options.get("poll_interval_ms", 20) / 1000
 
     try:
         mqtt_host, mqtt_port, mqtt_username, mqtt_password = _mqtt_settings(options)
@@ -135,7 +137,7 @@ def main() -> None:
                 if changed:
                     for index, value in enumerate(board.inputs):
                         client.publish(board_entities.input_topic(index), "ON" if value else "OFF", retain=True)
-            stop_event.wait(poll_interval)
+            stop_event.wait(board.poll_interval)
 
     def handle_shutdown(_signum: int, _frame: FrameType | None) -> None:
         _LOGGER.info("Shutting down")
@@ -143,7 +145,8 @@ def main() -> None:
         for board_entities in entities.values():
             client.publish(board_entities.availability_topic, "offline", retain=True)
         client.disconnect()
-        master.close()
+        for master in masters:
+            master.close()
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, handle_shutdown)
