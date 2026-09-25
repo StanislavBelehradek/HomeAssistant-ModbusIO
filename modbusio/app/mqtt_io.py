@@ -47,6 +47,7 @@ class BoardEntities:
         payload = {
             "name": f"{self.board.name} Input {index + 1}",
             "unique_id": f"modbusio_{object_id}",
+            "object_id": object_id,
             "state_topic": self.input_topic(index),
             "payload_on": "ON",
             "payload_off": "OFF",
@@ -61,6 +62,7 @@ class BoardEntities:
         payload = {
             "name": f"{self.board.name} Output {index + 1}",
             "unique_id": f"modbusio_{object_id}",
+            "object_id": object_id,
             "command_topic": self.output_command_topic(index),
             "state_topic": self.output_state_topic(index),
             "payload_on": "ON",
@@ -81,6 +83,7 @@ class BoardEntities:
         payload = {
             "name": name or f"{self.board.name} Input {index + 1} Button",
             "unique_id": f"modbusio_{object_id}",
+            "object_id": object_id,
             "state_topic": self.input_button_topic(index),
             "device_class": "enum",
             "options": BUTTON_STATES,
@@ -97,6 +100,7 @@ class BoardEntities:
         payload = {
             "name": name or f"{self.board.name} Output {index + 1}",
             "unique_id": f"modbusio_{object_id}",
+            "object_id": object_id,
             "command_topic": self.output_command_topic(index),
             "state_topic": self.output_state_topic(index),
             "payload_on": "ON",
