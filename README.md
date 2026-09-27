@@ -42,7 +42,7 @@ Assistant Core's Python environment.
 | `mqtt_host` / `mqtt_port` / `mqtt_username` / `mqtt_password` | Fallback MQTT broker connection details, only used if the Supervisor-managed broker (see below) isn't available. |
 | `discovery_prefix` | MQTT discovery prefix configured in the Home Assistant MQTT integration (default `homeassistant`). |
 | `long_press_time_ms` / `double_click_time_ms` | Global timing (milliseconds) used by all `button` entities to detect a long press and to distinguish a single click from a double click. |
-| `boards` | List of boards, each with its own serial connection: `name`, `address` (Modbus slave address, 1-247), `type` (`M23IOA08`, `M23IOB16`, `M23IOC24`, `M23IOD32`, `M23IOE48`, `M23IOF64`), `mode` (`input`, `output`, `input_output`), `port` (serial device, e.g. `/dev/ttyUSB0`), `baudrate`, `parity` (`N`/`E`/`O`), `poll_interval_ms` (milliseconds between input polls of this board's bus). Boards sharing the same `port`/`baudrate`/`parity` reuse the same serial connection. |
+| `boards` | List of boards, each with its own serial connection: `name`, `address` (Modbus slave address, 1-247), `type` (`M23IOA08`, `M23IOB16`, `M23IOC24`, `M23IOD32`, `M23IOE48`, `M23IOF64`), `mode` (`input`, `output`, `input_output`), `port` (serial device, e.g. `/dev/ttyUSB0`, or `dummy` - see below), `baudrate`, `parity` (`N`/`E`/`O`), `poll_interval_ms` (milliseconds between input polls of this board's bus). Boards sharing the same `port`/`baudrate`/`parity` reuse the same serial connection. |
 | `entities` | Optional list of per-point entity overrides: `name` (friendly name), `board` (must match a `boards[].name`), `point` (`input-N` or `output-N`, 1-based), `type` (`button` for an input, `light` for an output). Points not listed here keep the default `binary_sensor`/`switch` entity. |
 
 ### Button and light entities
@@ -70,6 +70,17 @@ entities:
     point: "output-4"
     type: "light"
 ```
+
+### Simulated (`dummy`) boards
+
+Setting a board's `port` to `dummy` runs it in simulation instead of opening
+a real serial connection - useful for testing the MQTT entities without any
+hardware attached. No Modbus traffic is sent; instead, whatever is written to
+an output is looped back and reported on the matching input, so an
+`input_output` board mirrors its outputs onto its inputs one poll interval
+later. `baudrate`/`parity` are still required but ignored, and (as with a
+real bus) boards sharing the same `port`/`baudrate`/`parity` share one
+simulated bus, so give each board on it a distinct `address`.
 
 ### MQTT broker discovery
 
