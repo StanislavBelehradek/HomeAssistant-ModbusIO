@@ -2,7 +2,7 @@
 
 Ported from the legacy C# `CoverEntity`: the boards report no real position
 feedback, so a cover's position is estimated from how long its drive relays
-have been energized versus the configured `open_time_ms`, interpolating and
+have been energized versus the configured `open_time_s`, interpolating and
 publishing it every `COVER_POSITION_PUBLISH_INTERVAL_S` while moving.
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ class CoverController:
         output_first: int,
         output_second: int,
         control_mode: str,
-        open_time_ms: int,
+        open_time_s: float,
         on_state: Callable[[str], None],
         on_position: Callable[[int], None],
     ) -> None:
@@ -48,7 +48,7 @@ class CoverController:
         self._output_first = output_first
         self._output_second = output_second
         self._control_mode = control_mode
-        self._open_time_ms = open_time_ms
+        self._open_time_s = open_time_s
         self._on_state = on_state
         self._on_position = on_position
 
@@ -102,7 +102,7 @@ class CoverController:
                 else (COVER_POSITION_CLOSED if desired_position > 50 else COVER_POSITION_OPEN)
             )
             distance = abs(desired_position - start_position)
-            total_move_time_s = 0.0 if distance == 0 else distance * self._open_time_ms / COVER_POSITION_OPEN / 1000
+            total_move_time_s = 0.0 if distance == 0 else distance * self._open_time_s / COVER_POSITION_OPEN
             move_up = desired_position > start_position
 
             self._position = start_position

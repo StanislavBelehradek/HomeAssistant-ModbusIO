@@ -45,7 +45,7 @@ COVER_POSITION_CLOSED = 0
 COVER_POSITION_OPEN = 100
 
 # States reported by a `cover` entity while its position is simulated from
-# the configured `open_time_ms` (no real position feedback from the board).
+# the configured `open_time_s` (no real position feedback from the board).
 COVER_STATE_OPEN = "open"
 COVER_STATE_OPENING = "opening"
 COVER_STATE_CLOSED = "closed"

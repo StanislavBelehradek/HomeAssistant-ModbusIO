@@ -47,7 +47,7 @@ Assistant Core's Python environment.
 | `long_press_time_ms` / `double_click_time_ms` | Global timing (milliseconds) used by all `button` entities to detect a long press and to distinguish a single click from a double click. |
 | `boards` | List of boards, each with its own serial connection: `name`, `address` (Modbus slave address, 1-247), `type` (`M23IOA08`, `M23IOB16`, `M23IOC24`, `M23IOD32`, `M23IOE48`, `M23IOF64`), `mode` (`input`, `output`, `input_output`), `port` (serial device, e.g. `/dev/ttyUSB0`, or `dummy` - see below), `baudrate`, `parity` (`N`/`E`/`O`), `poll_interval_ms` (milliseconds between input polls of this board's bus). Boards sharing the same `port`/`baudrate`/`parity` reuse the same serial connection. |
 | `entities` | Optional list of per-point entity overrides: `name` (friendly name), `board` (must match a `boards[].name`), `point` (`input-N` or `output-N`, 1-based), `type` (`button` for an input, `light` for an output). Points not listed here keep the default `binary_sensor`/`switch` entity. |
-| `covers` | Optional list of `cover` entities, each combining two of a board's output points: `name` (friendly name), `board` (must match a `boards[].name`), `output_first`/`output_second` (1-based output point numbers, claimed by this cover instead of getting the default `switch`/`light` entity), `control_mode` (`up_down` or `move_direction` - see below), `open_time_ms` (milliseconds for a full open/close travel, used to simulate position). |
+| `covers` | Optional list of `cover` entities, each combining two of a board's output points: `name` (friendly name), `board` (must match a `boards[].name`), `output_first`/`output_second` (1-based output point numbers, claimed by this cover instead of getting the default `switch`/`light` entity), `control_mode` (`up_down` or `move_direction` - see below), `open_time_s` (seconds for a full open/close travel, used to simulate position). |
 
 ### Button and light entities
 
@@ -81,7 +81,7 @@ Two of a board's output points can be grouped into a `cover` entity (e.g. a
 roller shutter/blind driven by a pair of relays) instead of each getting the
 default `switch` entity. The board has no real position feedback, so the
 cover's position (0 = closed, 100 = open) is simulated by timing the move
-against `open_time_ms`, publishing an interpolated position a few times a
+against `open_time_s`, publishing an interpolated position a few times a
 second while moving, and settling into `open`/`closed`/`stopped` once done or
 manually stopped.
 
@@ -99,7 +99,7 @@ covers:
     output_first: 5
     output_second: 6
     control_mode: "up_down"
-    open_time_ms: 25000
+    open_time_s: 25
 ```
 
 ### Simulated (`dummy`) boards

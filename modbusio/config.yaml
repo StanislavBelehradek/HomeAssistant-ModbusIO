@@ -1,5 +1,5 @@
 name: "Modbus IO (Eletechsup)"
-version: "0.1.6"
+version: "0.1.7"
 slug: "modbusio"
 description: "Control and monitor Eletechsup Modbus RTU IO boards (M23IOxx relay/opto-input boards) via MQTT discovery."
 url: "https://github.com/StanislavBelehradek/HomeAssistant-ModbusIO"
@@ -51,4 +51,4 @@ schema:
       output_first: "int(1,64)"
       output_second: "int(1,64)"
       control_mode: "list(up_down|move_direction)"
-      open_time_ms: "int(100,600000)"
+      open_time_s: "float(1,600)"

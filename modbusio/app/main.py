@@ -22,7 +22,8 @@ import paho.mqtt.client as mqtt
 from .button import ButtonDetector
 from .const import ENTITY_TYPE_BUTTON, ENTITY_TYPE_LIGHT, OPTIONS_FILE
 from .cover import CoverController
-from .io_board import IoBoard
+from .dummy_master import DUMMY_PORT, DummyModbusMaster
+from .io_board import IoBoard, ModbusBus
 from .modbus_master import ModbusMaster, ModbusMasterError
 from .mqtt_io import BoardEntities, CoverEntities, dumps
 
@@ -102,15 +103,22 @@ def _parse_entity_overrides(
     return button_overrides, light_overrides
 
 
-def _build_boards(options: dict) -> tuple[list[IoBoard], list[ModbusMaster]]:
-    """Build boards, opening one shared ModbusMaster per unique port/baudrate/parity."""
-    masters: dict[tuple[str, int, str], ModbusMaster] = {}
+def _build_boards(options: dict) -> tuple[list[IoBoard], list[ModbusBus]]:
+    """Build boards, opening one shared bus per unique port/baudrate/parity.
+
+    A `dummy` port never opens a real ModbusMaster - it gets a DummyModbusMaster
+    instead, so the board's behavior is simulated rather than talked to.
+    """
+    masters: dict[tuple[str, int, str], ModbusBus] = {}
     boards: list[IoBoard] = []
     for board_config in options.get("boards", []):
         bus_key = (board_config["port"], board_config["baudrate"], board_config.get("parity", "N"))
         master = masters.get(bus_key)
         if master is None:
-            master = ModbusMaster(port=bus_key[0], baudrate=bus_key[1], parity=bus_key[2])
+            if bus_key[0] == DUMMY_PORT:
+                master = DummyModbusMaster(bus_key[0])
+            else:
+                master = ModbusMaster(port=bus_key[0], baudrate=bus_key[1], parity=bus_key[2])
             master.open()
             masters[bus_key] = master
         boards.append(
@@ -204,7 +212,7 @@ def main() -> None:
             cover["first_index"],
             cover["second_index"],
             cover_config["control_mode"],
-            cover_config["open_time_ms"],
+            cover_config["open_time_s"],
             _on_state,
             _on_position,
         )

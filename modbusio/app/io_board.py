@@ -9,11 +9,19 @@ from __future__ import annotations
 
 import logging
 import math
+from typing import Protocol
 
 from .const import BOARD_IO_COUNT, INPUT_REGISTER_START, OUTPUT_REGISTER_START
-from .modbus_master import ModbusMaster, ModbusMasterError
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class ModbusBus(Protocol):
+    """Structural interface shared by `ModbusMaster` and `DummyModbusMaster`."""
+
+    def read_holding_registers(self, slave_address: int, start_address: int, count: int) -> list[int]: ...
+
+    def write_registers(self, slave_address: int, start_address: int, values: list[int]) -> None: ...
 
 
 class IoBoard:
@@ -22,7 +30,7 @@ class IoBoard:
     def __init__(
         self,
         name: str,
-        master: ModbusMaster,
+        master: ModbusBus,
         address: int,
         board_type: str,
         mode: str,
