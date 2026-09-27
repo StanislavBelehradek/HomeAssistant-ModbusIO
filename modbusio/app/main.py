@@ -22,8 +22,7 @@ import paho.mqtt.client as mqtt
 from .button import ButtonDetector
 from .const import ENTITY_TYPE_BUTTON, ENTITY_TYPE_LIGHT, OPTIONS_FILE
 from .cover import CoverController
-from .dummy_master import DUMMY_PORT, DummyModbusMaster
-from .io_board import IoBoard, ModbusBus
+from .io_board import DUMMY_PORT, IoBoard
 from .modbus_master import ModbusMaster, ModbusMasterError
 from .mqtt_io import BoardEntities, CoverEntities, dumps
 
@@ -103,24 +102,24 @@ def _parse_entity_overrides(
     return button_overrides, light_overrides
 
 
-def _build_boards(options: dict) -> tuple[list[IoBoard], list[ModbusBus]]:
+def _build_boards(options: dict) -> tuple[list[IoBoard], list[ModbusMaster]]:
     """Build boards, opening one shared bus per unique port/baudrate/parity.
 
-    A `dummy` port never opens a real ModbusMaster - it gets a DummyModbusMaster
-    instead, so the board's behavior is simulated rather than talked to.
+    A `dummy` port never opens a bus at all - the board gets no master, so
+    `IoBoard` runs it in simulation instead.
     """
-    masters: dict[tuple[str, int, str], ModbusBus] = {}
+    masters: dict[tuple[str, int, str], ModbusMaster] = {}
     boards: list[IoBoard] = []
     for board_config in options.get("boards", []):
-        bus_key = (board_config["port"], board_config["baudrate"], board_config.get("parity", "N"))
-        master = masters.get(bus_key)
-        if master is None:
-            if bus_key[0] == DUMMY_PORT:
-                master = DummyModbusMaster(bus_key[0])
-            else:
-                master = ModbusMaster(port=bus_key[0], baudrate=bus_key[1], parity=bus_key[2])
-            master.open()
-            masters[bus_key] = master
+        port = board_config["port"]
+        master: ModbusMaster | None = None
+        if port != DUMMY_PORT:
+            bus_key = (port, board_config["baudrate"], board_config.get("parity", "N"))
+            master = masters.get(bus_key)
+            if master is None:
+                master = ModbusMaster(port=port, baudrate=bus_key[1], parity=bus_key[2])
+                master.open()
+                masters[bus_key] = master
         boards.append(
             IoBoard(
                 board_config["name"],

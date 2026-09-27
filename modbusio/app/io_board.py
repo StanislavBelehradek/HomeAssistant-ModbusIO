@@ -9,28 +9,27 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Protocol
 
 from .const import BOARD_IO_COUNT, INPUT_REGISTER_START, OUTPUT_REGISTER_START
+from .modbus_master import ModbusMaster
 
 _LOGGER = logging.getLogger(__name__)
 
-
-class ModbusBus(Protocol):
-    """Structural interface shared by `ModbusMaster` and `DummyModbusMaster`."""
-
-    def read_holding_registers(self, slave_address: int, start_address: int, count: int) -> list[int]: ...
-
-    def write_registers(self, slave_address: int, start_address: int, values: list[int]) -> None: ...
+# Special `port` value that runs a board in simulation instead of over a real bus.
+DUMMY_PORT = "dummy"
 
 
 class IoBoard:
-    """Owns the input/output bit state for one Modbus IO board."""
+    """Owns the input/output bit state for one Modbus IO board.
+
+    `master=None` (the `dummy` port) runs the board in simulation: outputs are
+    looped back onto its own inputs instead of being sent to a bus.
+    """
 
     def __init__(
         self,
         name: str,
-        master: ModbusBus,
+        master: ModbusMaster | None,
         address: int,
         board_type: str,
         mode: str,
@@ -62,15 +61,20 @@ class IoBoard:
         self.outputs[index] = value
 
     def _read_inputs(self) -> bool:
-        registers = self._master.read_holding_registers(
-            self.address, INPUT_REGISTER_START, self._register_count
-        )
-        bits = _registers_to_bits(registers, self.io_count)
+        if self._master is None:
+            bits = list(self.outputs)
+        else:
+            registers = self._master.read_holding_registers(
+                self.address, INPUT_REGISTER_START, self._register_count
+            )
+            bits = _registers_to_bits(registers, self.io_count)
         changed = bits != self.inputs
         self.inputs = bits
         return changed
 
     def _write_outputs(self) -> None:
+        if self._master is None:
+            return
         registers = _bits_to_registers(self.outputs)
         for offset, register in enumerate(registers):
             self._master.write_registers(self.address, OUTPUT_REGISTER_START + offset, [register])
