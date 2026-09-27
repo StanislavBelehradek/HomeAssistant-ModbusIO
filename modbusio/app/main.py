@@ -21,9 +21,10 @@ import paho.mqtt.client as mqtt
 
 from .button import ButtonDetector
 from .const import ENTITY_TYPE_BUTTON, ENTITY_TYPE_LIGHT, OPTIONS_FILE
+from .cover import CoverController
 from .io_board import IoBoard
 from .modbus_master import ModbusMaster, ModbusMasterError
-from .mqtt_io import BoardEntities, dumps
+from .mqtt_io import BoardEntities, CoverEntities, dumps
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 _LOGGER = logging.getLogger("modbusio")
@@ -125,6 +126,37 @@ def _build_boards(options: dict) -> tuple[list[IoBoard], list[ModbusMaster]]:
     return boards, list(masters.values())
 
 
+def _build_covers(
+    options: dict, boards_by_name: dict[str, IoBoard]
+) -> tuple[list[dict], dict[str, set[int]]]:
+    """Parse the `covers` option, resolving each cover's board and claiming its
+    two output points so they're skipped by the default switch/light entities."""
+    covers: list[dict] = []
+    claimed_outputs: dict[str, set[int]] = {}
+    for cover_config in options.get("covers", []):
+        board = boards_by_name.get(cover_config["board"])
+        if board is None:
+            _LOGGER.warning("Ignoring cover %r: unknown board %r", cover_config["name"], cover_config["board"])
+            continue
+        if board.mode not in ("output", "input_output"):
+            _LOGGER.warning(
+                "Ignoring cover %r: board %r mode %r cannot drive outputs",
+                cover_config["name"], board.name, board.mode,
+            )
+            continue
+        first_index = cover_config["output_first"] - 1
+        second_index = cover_config["output_second"] - 1
+        if not (0 <= first_index < board.io_count) or not (0 <= second_index < board.io_count):
+            _LOGGER.warning(
+                "Ignoring cover %r: output_first/output_second out of range for board %r (%d points)",
+                cover_config["name"], board.name, board.io_count,
+            )
+            continue
+        covers.append({"config": cover_config, "board": board, "first_index": first_index, "second_index": second_index})
+        claimed_outputs.setdefault(board.name, set()).update({first_index, second_index})
+    return covers, claimed_outputs
+
+
 def main() -> None:
     options = _load_options()
     _log_serial_devices()
@@ -138,6 +170,7 @@ def main() -> None:
     entities = {board.name: BoardEntities(board) for board in boards}
     discovery_prefix = options.get("discovery_prefix", "homeassistant")
     button_overrides, light_overrides = _parse_entity_overrides(options)
+    covers, claimed_outputs = _build_covers(options, {board.name: board for board in boards})
 
     try:
         mqtt_host, mqtt_port, mqtt_username, mqtt_password = _mqtt_settings(options)
@@ -150,6 +183,34 @@ def main() -> None:
         client.username_pw_set(mqtt_username, mqtt_password)
 
     output_topics: dict[str, tuple[IoBoard, int]] = {}
+
+    cover_entities: list[CoverEntities] = []
+    cover_command_topics: dict[str, CoverController] = {}
+    cover_set_position_topics: dict[str, CoverController] = {}
+    for cover in covers:
+        cover_config = cover["config"]
+        board_entities = entities[cover["board"].name]
+        cover_ent = CoverEntities(board_entities, cover_config["name"])
+
+        def _on_state(state: str, cover_ent: CoverEntities = cover_ent) -> None:
+            client.publish(cover_ent.state_topic, state, retain=False)
+
+        def _on_position(position: int, cover_ent: CoverEntities = cover_ent) -> None:
+            client.publish(cover_ent.position_topic, str(position), retain=False)
+
+        controller = CoverController(
+            cover_config["name"],
+            cover["board"],
+            cover["first_index"],
+            cover["second_index"],
+            cover_config["control_mode"],
+            cover_config["open_time_ms"],
+            _on_state,
+            _on_position,
+        )
+        cover_entities.append(cover_ent)
+        cover_command_topics[cover_ent.command_topic] = controller
+        cover_set_position_topics[cover_ent.set_position_topic] = controller
 
     long_press_s = options.get("long_press_time_ms", 1000) / 1000
     double_click_s = options.get("double_click_time_ms", 300) / 1000
@@ -181,7 +242,10 @@ def main() -> None:
                         client.publish(board_entities.input_topic(index), "OFF", retain=True)
 
             if board.mode in ("output", "input_output"):
+                claimed = claimed_outputs.get(board.name, set())
                 for index in range(board.io_count):
+                    if index in claimed:
+                        continue
                     light_name = light_overrides.get((board.name, index))
                     if (board.name, index) in light_overrides:
                         topic, payload = board_entities.output_light_discovery(discovery_prefix, index, light_name)
@@ -193,12 +257,29 @@ def main() -> None:
                     output_topics[command_topic] = (board, index)
                     client.subscribe(command_topic)
 
+        for cover_ent in cover_entities:
+            topic, payload = cover_ent.discovery(discovery_prefix)
+            client.publish(topic, dumps(payload), retain=True)
+            client.subscribe(cover_ent.command_topic)
+            client.subscribe(cover_ent.set_position_topic)
+
     def on_message(client: mqtt.Client, _userdata, message: mqtt.MQTTMessage) -> None:
+        payload = message.payload.decode("utf-8")
+
+        cover_controller = cover_command_topics.get(message.topic)
+        if cover_controller is not None:
+            cover_controller.handle_command(payload)
+            return
+        cover_controller = cover_set_position_topics.get(message.topic)
+        if cover_controller is not None:
+            cover_controller.handle_set_position(payload)
+            return
+
         target = output_topics.get(message.topic)
         if target is None:
             return
         board, index = target
-        value = message.payload.decode("utf-8").strip().upper() == "ON"
+        value = payload.strip().upper() == "ON"
         board.set_output(index, value)
         client.publish(entities[board.name].output_state_topic(index), "ON" if value else "OFF", retain=True)
 

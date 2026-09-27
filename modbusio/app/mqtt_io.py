@@ -52,7 +52,7 @@ class BoardEntities:
             "payload_on": "ON",
             "payload_off": "OFF",
             "availability_topic": self.availability_topic,
-            "device": self._device_info(),
+            "device": self.device_info(),
         }
         return topic, payload
 
@@ -68,7 +68,7 @@ class BoardEntities:
             "payload_on": "ON",
             "payload_off": "OFF",
             "availability_topic": self.availability_topic,
-            "device": self._device_info(),
+            "device": self.device_info(),
         }
         return topic, payload
 
@@ -88,7 +88,7 @@ class BoardEntities:
             "device_class": "enum",
             "options": BUTTON_STATES,
             "availability_topic": self.availability_topic,
-            "device": self._device_info(),
+            "device": self.device_info(),
         }
         return topic, payload
 
@@ -106,14 +106,61 @@ class BoardEntities:
             "payload_on": "ON",
             "payload_off": "OFF",
             "availability_topic": self.availability_topic,
-            "device": self._device_info(),
+            "device": self.device_info(),
         }
         return topic, payload
 
-    def _device_info(self) -> dict[str, Any]:
+    def device_info(self) -> dict[str, Any]:
         return {
             "identifiers": [f"modbusio_{self.slug}"],
             "name": self.board.name,
             "manufacturer": "Eletechsup",
             "model": self.board.board_type,
         }
+
+
+class CoverEntities:
+    """Builds MQTT discovery config and topics for one `cover` entity."""
+
+    def __init__(self, board_entities: BoardEntities, name: str) -> None:
+        self._board_entities = board_entities
+        self.name = name
+        self.slug = _slugify(name)
+
+    @property
+    def command_topic(self) -> str:
+        return f"modbusio/{self._board_entities.slug}/cover/{self.slug}/set"
+
+    @property
+    def state_topic(self) -> str:
+        return f"modbusio/{self._board_entities.slug}/cover/{self.slug}/state"
+
+    @property
+    def position_topic(self) -> str:
+        return f"modbusio/{self._board_entities.slug}/cover/{self.slug}/position"
+
+    @property
+    def set_position_topic(self) -> str:
+        return f"modbusio/{self._board_entities.slug}/cover/{self.slug}/set_position"
+
+    def discovery(self, discovery_prefix: str) -> tuple[str, dict[str, Any]]:
+        object_id = f"{self._board_entities.slug}_cover_{self.slug}"
+        topic = f"{discovery_prefix}/cover/modbusio/{object_id}/config"
+        payload = {
+            "name": self.name,
+            "unique_id": f"modbusio_{object_id}",
+            "object_id": object_id,
+            "command_topic": self.command_topic,
+            "state_topic": self.state_topic,
+            "position_topic": self.position_topic,
+            "set_position_topic": self.set_position_topic,
+            "payload_open": "OPEN",
+            "payload_close": "CLOSE",
+            "payload_stop": "STOP",
+            "position_open": 100,
+            "position_closed": 0,
+            "optimistic": True,
+            "availability_topic": self._board_entities.availability_topic,
+            "device": self._board_entities.device_info(),
+        }
+        return topic, payload

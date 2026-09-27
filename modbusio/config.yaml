@@ -22,6 +22,7 @@ options:
   double_click_time_ms: 300
   boards: []
   entities: []
+  covers: []
 schema:
   mqtt_host: "str?"
   mqtt_port: "port?"
@@ -44,3 +45,10 @@ schema:
       board: "str"
       point: "str"
       type: "list(button|light)"
+  covers:
+    - name: "str"
+      board: "str"
+      output_first: "int(1,64)"
+      output_second: "int(1,64)"
+      control_mode: "list(up_down|move_direction)"
+      open_time_ms: "int(100,600000)"
