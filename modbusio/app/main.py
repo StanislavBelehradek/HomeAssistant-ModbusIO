@@ -30,6 +30,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 _LOGGER = logging.getLogger("modbusio")
 
 _POINT_RE = re.compile(r"^(input|output)-(\d+)$")
+_POLL_EXCEPTION_TIMEOUT = 2  # seconds to wait after an exception during polling
 
 
 def _load_options() -> dict:
@@ -303,6 +304,9 @@ def main() -> None:
                 changed = board.poll()
             except ModbusMasterError as err:
                 _LOGGER.warning("Board %s poll failed: %s", board.name, err)
+            except Exception as err:
+                _LOGGER.error("Unexpected error while polling board %s: %s", board.name, err, exc_info=True)
+                stop_event.wait(_POLL_EXCEPTION_TIMEOUT)
             else:
                 if changed:
                     for index, value in enumerate(board.inputs):
