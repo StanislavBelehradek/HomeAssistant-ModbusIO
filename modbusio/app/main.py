@@ -15,6 +15,7 @@ import re
 import signal
 import sys
 import threading
+import time
 from types import FrameType
 
 import paho.mqtt.client as mqtt
@@ -237,6 +238,11 @@ def main() -> None:
             board_entities = entities[board.name]
             client.publish(board_entities.availability_topic, "online", retain=True)
 
+            topic, payload = board_entities.read_time_discovery(discovery_prefix)
+            client.publish(topic, dumps(payload), retain=True)
+            topic, payload = board_entities.write_time_discovery(discovery_prefix)
+            client.publish(topic, dumps(payload), retain=True)
+
             if board.mode in ("input", "input_output"):
                 for index in range(board.io_count):
                     button_name = button_overrides.get((board.name, index))
@@ -298,6 +304,7 @@ def main() -> None:
 
     def poll_loop(board: IoBoard) -> None:
         board_entities = entities[board.name]
+        last_io_time_publish = 0.0
         while not stop_event.is_set():
             previous_inputs = list(board.inputs)
             try:
@@ -316,6 +323,11 @@ def main() -> None:
                                 detector.handle_edge(value)
                         else:
                             client.publish(board_entities.input_topic(index), "ON" if value else "OFF", retain=True)
+                now = time.monotonic()
+                if now - last_io_time_publish >= 1:
+                    client.publish(board_entities.read_time_topic, f"{board.average_read_time_ms:.1f}", retain=False)
+                    client.publish(board_entities.write_time_topic, f"{board.average_write_time_ms:.1f}", retain=False)
+                    last_io_time_publish = now
             stop_event.wait(board.poll_interval)
 
     def handle_shutdown(_signum: int, _frame: FrameType | None) -> None:

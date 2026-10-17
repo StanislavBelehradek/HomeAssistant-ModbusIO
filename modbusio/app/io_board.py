@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import logging
 import math
+import time
+from collections import deque
 
 from .const import BOARD_IO_COUNT, INPUT_REGISTER_START, OUTPUT_REGISTER_START
 from .modbus_master import ModbusMaster
@@ -17,6 +19,30 @@ _LOGGER = logging.getLogger(__name__)
 
 # Special `port` value that runs a board in simulation instead of over a real bus.
 DUMMY_PORT = "dummy"
+
+# Width of the sliding window used to average Modbus read/write call durations.
+POLL_TIME_WINDOW_S = 1.0
+
+
+class _DurationTracker:
+    """Averages durations recorded within the trailing POLL_TIME_WINDOW_S."""
+
+    def __init__(self) -> None:
+        self._samples: deque[tuple[float, float]] = deque()
+
+    def record(self, duration: float) -> None:
+        now = time.monotonic()
+        self._samples.append((now, duration))
+        cutoff = now - POLL_TIME_WINDOW_S
+        while self._samples and self._samples[0][0] < cutoff:
+            self._samples.popleft()
+
+    @property
+    def average_ms(self) -> float:
+        if not self._samples:
+            return 0.0
+        durations = [duration for _, duration in self._samples]
+        return sum(durations) / len(durations) * 1000
 
 
 class IoBoard:
@@ -47,6 +73,9 @@ class IoBoard:
         self.inputs: list[bool] = [False] * self.io_count
         self.outputs: list[bool] = [False] * self.io_count
 
+        self._read_durations = _DurationTracker()
+        self._write_durations = _DurationTracker()
+
     def poll(self) -> bool:
         """Read inputs and write pending outputs. Returns True if inputs changed."""
         changed = False
@@ -56,6 +85,16 @@ class IoBoard:
             self._write_outputs()
         return changed
 
+    @property
+    def average_read_time_ms(self) -> float:
+        """Average read_holding_registers() call duration in ms, over the last POLL_TIME_WINDOW_S."""
+        return self._read_durations.average_ms
+
+    @property
+    def average_write_time_ms(self) -> float:
+        """Average write_registers() call duration in ms, over the last POLL_TIME_WINDOW_S."""
+        return self._write_durations.average_ms
+
     def set_output(self, index: int, value: bool) -> None:
         """Set a single 0-based output bit; written to the bus on the next poll."""
         self.outputs[index] = value
@@ -64,9 +103,11 @@ class IoBoard:
         if self._master is None:
             bits = list(self.outputs)
         else:
+            start = time.monotonic()
             registers = self._master.read_holding_registers(
                 self.address, INPUT_REGISTER_START, self._register_count
             )
+            self._read_durations.record(time.monotonic() - start)
             bits = _registers_to_bits(registers, self.io_count)
         changed = bits != self.inputs
         self.inputs = bits
@@ -77,7 +118,9 @@ class IoBoard:
             return
         registers = _bits_to_registers(self.outputs)
         for offset, register in enumerate(registers):
+            start = time.monotonic()
             self._master.write_registers(self.address, OUTPUT_REGISTER_START + offset, [register])
+            self._write_durations.record(time.monotonic() - start)
 
 
 def _registers_to_bits(registers: list[int], count: int) -> list[bool]:

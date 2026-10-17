@@ -29,7 +29,7 @@ class ModbusMaster:
             parity=parity,
             bytesize=8,
             stopbits=1,
-            timeout=1,
+            timeout=0.2,
         )
 
     def open(self) -> None:

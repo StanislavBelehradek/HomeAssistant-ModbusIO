@@ -31,6 +31,8 @@ class BoardEntities:
         self.board = board
         self.slug = _slugify(board.name)
         self.availability_topic = f"modbusio/{self.slug}/status"
+        self.read_time_topic = f"modbusio/{self.slug}/read_time"
+        self.write_time_topic = f"modbusio/{self.slug}/write_time"
 
     def input_topic(self, index: int) -> str:
         return f"modbusio/{self.slug}/input/{index + 1}/state"
@@ -109,6 +111,29 @@ class BoardEntities:
             "device": self.device_info(),
         }
         return topic, payload
+
+    def io_time_discovery(self, discovery_prefix: str, kind: str, name: str, state_topic: str) -> tuple[str, dict[str, Any]]:
+        object_id = f"{self.slug}_{kind}"
+        topic = f"{discovery_prefix}/sensor/modbusio/{object_id}/config"
+        payload = {
+            "name": f"{self.board.name} {name}",
+            "unique_id": f"modbusio_{object_id}",
+            "object_id": object_id,
+            "state_topic": state_topic,
+            "unit_of_measurement": "ms",
+            "device_class": "duration",
+            "state_class": "measurement",
+            "entity_category": "diagnostic",
+            "availability_topic": self.availability_topic,
+            "device": self.device_info(),
+        }
+        return topic, payload
+
+    def read_time_discovery(self, discovery_prefix: str) -> tuple[str, dict[str, Any]]:
+        return self.io_time_discovery(discovery_prefix, "read_time", "Modbus Read Time", self.read_time_topic)
+
+    def write_time_discovery(self, discovery_prefix: str) -> tuple[str, dict[str, Any]]:
+        return self.io_time_discovery(discovery_prefix, "write_time", "Modbus Write Time", self.write_time_topic)
 
     def device_info(self) -> dict[str, Any]:
         return {
