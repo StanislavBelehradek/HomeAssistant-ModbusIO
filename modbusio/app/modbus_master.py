@@ -39,6 +39,12 @@ class ModbusMaster:
     def close(self) -> None:
         self._client.close()
 
+    def set_timeout(self, timeout: float) -> None:
+        """Update the per-request serial timeout, applied to the live connection too."""
+        self._client.comm_params.timeout_connect = timeout
+        if self._client.socket is not None:
+            self._client.socket.timeout = timeout
+
     def read_holding_registers(self, slave_address: int, start_address: int, count: int) -> list[int]:
         with self._lock:
             result = self._client.read_holding_registers(start_address, count=count, slave=slave_address)

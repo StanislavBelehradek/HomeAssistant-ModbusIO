@@ -23,6 +23,12 @@ DUMMY_PORT = "dummy"
 # Width of the sliding window used to average Modbus read/write call durations.
 POLL_TIME_WINDOW_S = 1.0
 
+# Floor for the dynamic master timeout, matching ModbusMaster's initial default.
+MIN_MASTER_TIMEOUT_S = 0.2
+
+# Safety margin applied to the measured call duration when sizing the master timeout.
+TIMEOUT_MULTIPLIER = 2
+
 
 class _DurationTracker:
     """Averages durations recorded within the trailing POLL_TIME_WINDOW_S."""
@@ -43,6 +49,10 @@ class _DurationTracker:
             return 0.0
         durations = [duration for _, duration in self._samples]
         return sum(durations) / len(durations) * 1000
+
+    @property
+    def average_s(self) -> float:
+        return self.average_ms / 1000
 
 
 class IoBoard:
@@ -108,6 +118,7 @@ class IoBoard:
                 self.address, INPUT_REGISTER_START, self._register_count
             )
             self._read_durations.record(time.monotonic() - start)
+            self._update_timeout(self._read_durations)
             bits = _registers_to_bits(registers, self.io_count)
         changed = bits != self.inputs
         self.inputs = bits
@@ -121,6 +132,11 @@ class IoBoard:
             start = time.monotonic()
             self._master.write_registers(self.address, OUTPUT_REGISTER_START + offset, [register])
             self._write_durations.record(time.monotonic() - start)
+            self._update_timeout(self._write_durations)
+
+    def _update_timeout(self, tracker: _DurationTracker) -> None:
+        """Keep the master's serial timeout ahead of the call latency that was just observed."""
+        self._master.set_timeout(max(MIN_MASTER_TIMEOUT_S, tracker.average_s * TIMEOUT_MULTIPLIER))
 
 
 def _registers_to_bits(registers: list[int], count: int) -> list[bool]:
