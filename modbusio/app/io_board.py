@@ -114,10 +114,9 @@ class IoBoard:
             bits = list(self.outputs)
         else:
             start = time.monotonic()
-            registers = self._master.read_holding_registers(
-                self.address, INPUT_REGISTER_START, self._register_count
-            )
+            registers = self._master.read_holding_registers(self.address, INPUT_REGISTER_START, self._register_count)
             self._read_durations.record(time.monotonic() - start)
+            time.sleep(0.01)
             self._update_timeout(self._read_durations)
             bits = _registers_to_bits(registers, self.io_count)
         changed = bits != self.inputs
@@ -128,11 +127,14 @@ class IoBoard:
         if self._master is None:
             return
         registers = _bits_to_registers(self.outputs)
+        self._update_timeout(self._write_durations)
         for offset, register in enumerate(registers):
             start = time.monotonic()
             self._master.write_registers(self.address, OUTPUT_REGISTER_START + offset, [register])
             self._write_durations.record(time.monotonic() - start)
-            self._update_timeout(self._write_durations)
+            time.sleep(0.01)
+            
+            
 
     def _update_timeout(self, tracker: _DurationTracker) -> None:
         """Keep the master's serial timeout ahead of the call latency that was just observed."""
