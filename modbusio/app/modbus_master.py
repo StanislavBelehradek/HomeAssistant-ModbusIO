@@ -29,7 +29,7 @@ class ModbusMaster:
             parity=parity,
             bytesize=8,
             stopbits=1,
-            timeout=0.2,
+            timeout=1,
             # Without these, pymodbus gives up after a single empty/garbled
             # reply instead of using its own `retries` (default 3), which is
             # what causes transient line noise to surface as poll failures.
