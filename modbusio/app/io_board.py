@@ -116,7 +116,7 @@ class IoBoard:
             start = time.monotonic()
             registers = self._master.read_holding_registers(self.address, INPUT_REGISTER_START, self._register_count)
             self._read_durations.record(time.monotonic() - start)
-            time.sleep(0.01)
+            # time.sleep(0.01)
             self._update_timeout(self._read_durations)
             bits = _registers_to_bits(registers, self.io_count)
         changed = bits != self.inputs
@@ -132,7 +132,7 @@ class IoBoard:
             start = time.monotonic()
             self._master.write_registers(self.address, OUTPUT_REGISTER_START + offset, [register])
             self._write_durations.record(time.monotonic() - start)
-            time.sleep(0.01)
+            # time.sleep(0.01)
             
             
 
