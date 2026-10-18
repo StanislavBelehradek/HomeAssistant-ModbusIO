@@ -33,8 +33,8 @@ class ModbusMaster:
             # Without these, pymodbus gives up after a single empty/garbled
             # reply instead of using its own `retries` (default 3), which is
             # what causes transient line noise to surface as poll failures.
-            retry_on_empty=True,
-            retry_on_invalid=True,
+            retry_on_empty=False,
+            retry_on_invalid=False,
         )
 
     def open(self) -> None:
@@ -46,9 +46,9 @@ class ModbusMaster:
 
     def set_timeout(self, timeout: float) -> None:
         """Update the per-request serial timeout, applied to the live connection too."""
-        self._client.comm_params.timeout_connect = timeout
-        if self._client.socket is not None:
-            self._client.socket.timeout = timeout
+        # self._client.comm_params.timeout_connect = timeout
+        # if self._client.socket is not None:
+        #     self._client.socket.timeout = timeout
 
     def read_holding_registers(self, slave_address: int, start_address: int, count: int) -> list[int]:
         with self._lock:
